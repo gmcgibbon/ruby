@@ -2769,6 +2769,9 @@ nsdr(void)
 }
 
 #if VM_COLLECT_USAGE_DETAILS
+static VALUE usage_analysis_insn_start(VALUE self);
+static VALUE usage_analysis_operand_start(VALUE self);
+static VALUE usage_analysis_register_start(VALUE self);
 static VALUE usage_analysis_insn_stop(VALUE self);
 static VALUE usage_analysis_operand_stop(VALUE self);
 static VALUE usage_analysis_register_stop(VALUE self);
@@ -2969,6 +2972,9 @@ Init_VM(void)
     define_usage_analysis_hash(REGS);
     define_usage_analysis_hash(INSN_BIGRAM);
 
+    rb_define_singleton_method(rb_cRubyVM, "USAGE_ANALYSIS_INSN_START", usage_analysis_insn_start, 0);
+    rb_define_singleton_method(rb_cRubyVM, "USAGE_ANALYSIS_OPERAND_START", usage_analysis_operand_start, 0);
+    rb_define_singleton_method(rb_cRubyVM, "USAGE_ANALYSIS_REGISTER_START", usage_analysis_register_start, 0);
     rb_define_singleton_method(rb_cRubyVM, "USAGE_ANALYSIS_INSN_STOP", usage_analysis_insn_stop, 0);
     rb_define_singleton_method(rb_cRubyVM, "USAGE_ANALYSIS_OPERAND_STOP", usage_analysis_operand_stop, 0);
     rb_define_singleton_method(rb_cRubyVM, "USAGE_ANALYSIS_REGISTER_STOP", usage_analysis_register_stop, 0);
@@ -3306,11 +3312,34 @@ vm_analysis_register(int reg, int isset)
 
 #undef HASH_ASET
 
-void (*ruby_vm_collect_usage_func_insn)(int insn) = vm_analysis_insn;
-void (*ruby_vm_collect_usage_func_operand)(int insn, int n, VALUE op) = vm_analysis_operand;
-void (*ruby_vm_collect_usage_func_register)(int reg, int isset) = vm_analysis_register;
+void (*ruby_vm_collect_usage_func_insn)(int insn) = NULL;
+void (*ruby_vm_collect_usage_func_operand)(int insn, int n, VALUE op) = NULL;
+void (*ruby_vm_collect_usage_func_register)(int reg, int isset) = NULL;
 
 /* :nodoc: */
+static VALUE
+usage_analysis_insn_start(VALUE self)
+{
+    ruby_vm_collect_usage_func_insn = vm_analysis_insn;
+    return Qnil;
+}
+
+/* :nodoc: */
+static VALUE
+usage_analysis_operand_start(VALUE self)
+{
+    ruby_vm_collect_usage_func_operand = vm_analysis_operand;
+    return Qnil;
+}
+
+/* :nodoc: */
+static VALUE
+usage_analysis_register_start(VALUE self)
+{
+    ruby_vm_collect_usage_func_register = vm_analysis_register;
+    return Qnil;
+}
+
 static VALUE
 usage_analysis_insn_stop(VALUE self)
 {
