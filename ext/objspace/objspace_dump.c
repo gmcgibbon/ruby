@@ -512,6 +512,8 @@ dump_object(VALUE obj, struct dump_config *dc)
       case T_HASH:
         dump_append(dc, ", \"size\":");
         dump_append_sizet(dc, (size_t)RHASH_SIZE(obj));
+        if (rb_hash_compare_by_id_p(obj))
+            dump_append(dc, ", \"compare_by_id\":true");
         if (FL_TEST(obj, RHASH_PROC_DEFAULT)) {
             dump_append(dc, ", \"default\":");
             dump_append_ref(dc, RHASH_IFNONE(obj));
@@ -847,6 +849,61 @@ objspace_dump_shapes(VALUE os, VALUE output, VALUE shapes)
     return dump_result(&dc);
 }
 
+struct dump_pinned_object_parents_i_data {
+    struct dump_config *dc;
+    VALUE obj;
+    bool has_pinned_child;
+};
+
+static void
+dump_pinned_object_parents_child_i(VALUE obj, void *data)
+{
+    struct dump_pinned_object_parents_i_data *each_data = data;
+
+    if (SPECIAL_CONST_P(obj)) return;
+    if (obj == each_data->obj) return;
+    if (obj == CLASS_OF(each_data->obj)) return;
+
+    if (RVALUE_PINNED(obj)) {
+        each_data->has_pinned_child = true;
+    }
+}
+
+static int
+dump_pinned_object_parents_i(void *start, void *end, size_t stride, void *data)
+{
+    struct dump_config *dc = data;
+    struct dump_pinned_object_parents_i_data each_data = {
+        .dc = dc
+    };
+
+    for (VALUE obj = (VALUE)start; obj < (VALUE)end; obj += stride) {
+        if (BUILTIN_TYPE(obj) == T_NONE) continue;
+
+        each_data.obj = obj;
+        each_data.has_pinned_child = false;
+
+        rb_objspace_reachable_objects_from(obj, dump_pinned_object_parents_child_i, &each_data);
+
+        if (each_data.has_pinned_child) {
+            dump_object(obj, dc);
+        }
+    }
+
+    return false;
+}
+
+static VALUE
+dump_pinned_object_parents(VALUE os, VALUE output)
+{
+    struct dump_config dc = {0,};
+    dump_output(&dc, output, Qtrue, Qnil, Qfalse);
+
+    rb_objspace_each_objects(dump_pinned_object_parents_i, &dc);
+
+    return dump_result(&dc);
+}
+
 void
 Init_objspace_dump(VALUE rb_mObjSpace)
 {
@@ -858,6 +915,7 @@ Init_objspace_dump(VALUE rb_mObjSpace)
     rb_define_module_function(rb_mObjSpace, "_dump", objspace_dump, 2);
     rb_define_module_function(rb_mObjSpace, "_dump_all", objspace_dump_all, 4);
     rb_define_module_function(rb_mObjSpace, "_dump_shapes", objspace_dump_shapes, 2);
+    rb_define_module_function(rb_mObjSpace, "dump_pinned_object_parents", dump_pinned_object_parents, 1);
 
     /* force create static IDs */
     rb_obj_gc_flags(rb_mObjSpace, 0, 0);

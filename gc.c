@@ -1757,7 +1757,7 @@ RVALUE_MARKED(VALUE obj)
     return RVALUE_MARK_BITMAP(obj) != 0;
 }
 
-static inline int
+bool
 RVALUE_PINNED(VALUE obj)
 {
     check_rvalue_consistency(obj);
